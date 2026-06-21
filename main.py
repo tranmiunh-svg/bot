@@ -81,7 +81,7 @@ AUTO_SERVER_CONFIG = {
     ],
 }
 
-def create_embed(title, description="", color=discord.Color.blue(), fields=None, thumbnail=None, image=None, footer=None, timestamp=False):
+def create_embed(title: str, description: str = "", color: discord.Color = discord.Color.blue(), fields=None, thumbnail=None, image=None, footer=None, timestamp: bool = False) -> discord.Embed:
     embed = discord.Embed(title=title, description=description, color=color, timestamp=datetime.now() if timestamp else None)
     if fields:
         for f in fields: embed.add_field(name=f.get("name",""), value=f.get("value",""), inline=f.get("inline",True))
@@ -90,11 +90,11 @@ def create_embed(title, description="", color=discord.Color.blue(), fields=None,
     if footer: embed.set_footer(text=footer)
     return embed
 
-def check_token(uid): return user_tokens.get(uid)
-def check_player(uid): return players.get(uid)
+def check_token(uid: int) -> Optional[str]: return user_tokens.get(uid)
+def check_player(uid: int) -> Optional[Dict]: return players.get(uid)
 
 # ========== SCRAPE ==========
-async def scrape_web(url, is_json=False):
+async def scrape_web(url: str, is_json: bool = False) -> List[str]:
     images = []
     try:
         async with aiohttp.ClientSession() as s:
@@ -114,11 +114,10 @@ async def scrape_web(url, is_json=False):
     except: pass
     return list(set(images))
 
-async def get_web_nsfw_url(category):
+async def get_web_nsfw_url(category: str) -> Optional[str]:
     if category in nsfw_web_cache and time.time() - cache_timestamp.get(category, 0) < 300:
         if nsfw_web_cache[category]: return random.choice(nsfw_web_cache[category])
     images = []
-    # Nguồn 1: waifu.pics
     try:
         async with aiohttp.ClientSession() as s:
             async with s.get(f"https://api.waifu.pics/nsfw/{category}", timeout=aiohttp.ClientTimeout(total=15)) as r:
@@ -126,11 +125,8 @@ async def get_web_nsfw_url(category):
                     d = await r.json()
                     if d.get("url"): images.append(d["url"])
     except: pass
-    # Nguồn 2: quatvn.biz
     if not images: images = await scrape_web("https://quatvn.biz/wp-json/wp/v2/media?per_page=30", is_json=True)
-    # Nguồn 3: damconuong.mom
     if not images: images = await scrape_web("https://damconuong.mom/")
-    # Nguồn 4: anhanime4k (cho hentai)
     if not images and category == "hentai": images = await scrape_web(f"https://anhanime4k.com/hentai/page/{random.randint(1,10)}/")
     if images:
         nsfw_web_cache[category] = images
@@ -138,7 +134,7 @@ async def get_web_nsfw_url(category):
         return random.choice(images)
     return None
 
-def get_local_nsfw_file(category):
+def get_local_nsfw_file(category: str):
     cat_dir = NSFW_CATEGORIES.get(category, os_module.path.join(NSFW_DIR,"waifu"))
     files = []
     for ext in ["*.jpg","*.jpeg","*.png","*.gif","*.webp"]:
@@ -157,7 +153,7 @@ async def on_ready():
 
 # ========== HELP ==========
 @bot.tree.command(name="help", description="Menu")
-async def help_cmd(interaction):
+async def help_cmd(interaction: discord.Interaction):
     embed = create_embed(title="🤖 BOT v5.0", description="**Auto Setup + NSFW + Game + Fun**", color=discord.Color.purple(),
         fields=[
             {"name":"🚀 Setup","value":"`/autosetup` - Tạo server (giữ kênh cũ)","inline":False},
@@ -170,7 +166,7 @@ async def help_cmd(interaction):
 # ========== NSFW (KHÔNG GIỚI HẠN KÊNH) ==========
 @bot.tree.command(name="nsfw", description="NSFW 18+")
 @app_commands.choices(category=[app_commands.Choice(name=n.title(), value=n) for n in NSFW_CATEGORIES]+[app_commands.Choice(name="Danh sách", value="list")])
-async def nsfw_cmd(interaction, category="waifu"):
+async def nsfw_cmd(interaction: discord.Interaction, category: str = "waifu"):
     if category == "list":
         await interaction.response.send_message(embed=create_embed(title="🔞 NSFW LIST", description=", ".join(NSFW_CATEGORIES.keys()), color=discord.Color.dark_red()))
         return
@@ -188,11 +184,10 @@ async def nsfw_cmd(interaction, category="waifu"):
 # ========== AUTO SETUP (KHÔNG XÓA KÊNH CŨ) ==========
 @bot.tree.command(name="autosetup", description="Tạo server (giữ kênh cũ)")
 @app_commands.default_permissions(administrator=True)
-async def autosetup_cmd(interaction):
+async def autosetup_cmd(interaction: discord.Interaction):
     guild = interaction.guild
     await interaction.response.defer(ephemeral=True)
     created = []
-    # Roles
     for rc in AUTO_SERVER_CONFIG["roles"]:
         if not discord.utils.get(guild.roles, name=rc["name"]):
             try:
@@ -203,7 +198,6 @@ async def autosetup_cmd(interaction):
                 await guild.create_role(name=rc["name"], color=discord.Color(rc["color"]), permissions=perms, hoist=rc.get("hoist",False), mentionable=True)
                 created.append(f"✅ Role: {rc['name']}")
             except: pass
-    # Categories
     for cc in AUTO_SERVER_CONFIG["categories"]:
         if not discord.utils.get(guild.categories, name=cc["name"]):
             try:
@@ -212,7 +206,6 @@ async def autosetup_cmd(interaction):
                     await cat.set_permissions(guild.default_role, view_channel=False)
                 created.append(f"✅ Category: {cc['name']}")
             except: pass
-    # Channels
     nsfw_role = discord.utils.get(guild.roles, name="🔞 NSFW Access")
     for ch in AUTO_SERVER_CONFIG["channels"]:
         if not (discord.utils.get(guild.text_channels, name=ch["name"]) or discord.utils.get(guild.voice_channels, name=ch["name"])):
@@ -223,52 +216,46 @@ async def autosetup_cmd(interaction):
                 else:
                     nc = await guild.create_voice_channel(name=ch["name"], category=cat)
                 created.append(f"✅ {ch['type']}: {ch['name']}")
-                # Gửi welcome + verify cho kênh xác nhận 18+
                 if ch["name"] == "🔞-xác-nhận" and nsfw_role:
                     try: await nc.purge(limit=5)
                     except: pass
                     class V(discord.ui.View):
                         def __init__(self): super().__init__(timeout=None)
                         @discord.ui.button(label="✅ Tôi trên 18 tuổi", style=discord.ButtonStyle.green, custom_id="v18nsfw")
-                        async def ok(self, bi, b):
+                        async def ok(self, bi: discord.Interaction, b):
                             r = discord.utils.get(bi.guild.roles, name="🔞 NSFW Access")
                             if r and r not in bi.user.roles:
                                 await bi.user.add_roles(r)
                                 await bi.response.send_message("✅ Thành công! Vào 🔞-nsfw nhé!", ephemeral=True)
                             else: await bi.response.send_message("✅ Đã xác nhận!", ephemeral=True)
                     await nc.send(embed=create_embed(title="🔞 XÁC NHẬN 18+", description="Nhấn nút để xác nhận bạn trên 18 tuổi.", color=discord.Color.dark_red()), view=V())
-                # Gửi hướng dẫn kênh NSFW
                 if ch["name"] == "🔞-nsfw":
                     try: await nc.purge(limit=5)
                     except: pass
                     await nc.send(embed=create_embed(title="🔞 KÊNH NSFW", description="Dùng `/nsfw waifu`, `/nsfw hentai`, `/nsfw boobs`, `/nsfw list`...", color=discord.Color.dark_purple()))
-                # Gửi welcome kênh chat 18+
                 if ch["name"] == "🔞-chat":
                     try: await nc.purge(limit=5)
                     except: pass
                     await nc.send(embed=create_embed(title="💬 CHAT 18+", description="Chào mừng đến phòng chat 18+!", color=discord.Color.gold()))
             except: pass
-    # Welcome kênh welcome
     wc = discord.utils.get(guild.text_channels, name="👋-welcome")
     if wc:
         try: await wc.purge(limit=5)
         except: pass
         await wc.send(embed=create_embed(title="👋 CHÀO MỪNG", description="Chào mừng đến server!\nĐọc luật tại 📜-luật\n🔞 Vào 🔞-xác-nhận để verify 18+", color=discord.Color.green()))
-    # Luật
     rc = discord.utils.get(guild.text_channels, name="📜-luật")
     if rc:
         try: await rc.purge(limit=5)
         except: pass
         await rc.send(embed=create_embed(title="📜 NỘI QUY", description="1. Tôn trọng\n2. Không spam\n3. NSFW chỉ trong kênh 🔞", color=discord.Color.blue()))
-    
     await interaction.followup.send(embed=create_embed(title="✅ AUTO SETUP", description="Đã tạo:\n"+"\n".join(created) if created else "Tất cả đã có!", color=discord.Color.green()), ephemeral=True)
 
 # ========== CLEAR ==========
 @bot.tree.command(name="clear", description="Xóa tin nhắn")
 @app_commands.default_permissions(manage_messages=True)
-async def clear_cmd(interaction, amount: int=10):
-    if amount<1: amount=1
-    if amount>100: amount=100
+async def clear_cmd(interaction: discord.Interaction, amount: int = 10):
+    if amount < 1: amount = 1
+    if amount > 100: amount = 100
     await interaction.response.defer(ephemeral=True)
     try:
         d = await interaction.channel.purge(limit=amount)
@@ -278,20 +265,20 @@ async def clear_cmd(interaction, amount: int=10):
 # ========== GAME ==========
 @bot.tree.command(name="create", description="Tạo nhân vật")
 @app_commands.choices(class_name=[app_commands.Choice(name=v["name"], value=k) for k,v in CLASSES.items()])
-async def create_cmd(interaction, name: str, class_name: str):
+async def create_cmd(interaction: discord.Interaction, name: str, class_name: str):
     if interaction.user.id in players: await interaction.response.send_message("❌ Đã có!", ephemeral=True); return
     c = CLASSES[class_name]
     players[interaction.user.id] = {"name":name,"class":class_name,"level":1,"xp":0,"hp":c["hp"],"max_hp":c["hp"],"atk":c["atk"],"def":c["def"],"gold":100,"wins":0,"losses":0}
     await interaction.response.send_message(embed=create_embed(title=f"✅ {c['emoji']} {name}", description=f"❤️{c['hp']} ⚔️{c['atk']} 🛡️{c['def']} 💰100", color=discord.Color.green()))
 
 @bot.tree.command(name="profile", description="Xem nhân vật")
-async def profile_cmd(interaction):
+async def profile_cmd(interaction: discord.Interaction):
     p = check_player(interaction.user.id)
     if not p: await interaction.response.send_message("❌ /create!", ephemeral=True); return
     await interaction.response.send_message(f"👤 {p['name']} Lv.{p['level']} | ❤️{p['hp']}/{p['max_hp']} ⚔️{p['atk']} 🛡️{p['def']} 💰{p['gold']} | 🏆{p['wins']}W/{p['losses']}L")
 
 @bot.tree.command(name="battle", description="PvP")
-async def battle_cmd(interaction):
+async def battle_cmd(interaction: discord.Interaction):
     p = check_player(interaction.user.id)
     if not p: await interaction.response.send_message("❌ /create!", ephemeral=True); return
     opps = [pp for pid, pp in players.items() if pid != interaction.user.id]
@@ -307,14 +294,14 @@ async def battle_cmd(interaction):
     await interaction.followup.send(f"⚔️ {m}! 💰 {p['gold']}g")
 
 @bot.tree.command(name="shop", description="Cửa hàng")
-async def shop_cmd(interaction):
+async def shop_cmd(interaction: discord.Interaction):
     p = check_player(interaction.user.id)
     if not p: await interaction.response.send_message("❌ /create!", ephemeral=True); return
     items = "\n".join([f"{i['emoji']} **{i['name']}** - {i['price']}💰" for i in ITEMS])
     await interaction.response.send_message(embed=create_embed(title="🛒 SHOP", description=f"💰 {p['gold']}g\n\n{items}\n`/buy <tên>`", color=discord.Color.gold()))
 
 @bot.tree.command(name="buy", description="Mua đồ")
-async def buy_cmd(interaction, item_name: str):
+async def buy_cmd(interaction: discord.Interaction, item_name: str):
     p = check_player(interaction.user.id)
     if not p: await interaction.response.send_message("❌ /create!", ephemeral=True); return
     item = next((i for i in ITEMS if i['name'].lower()==item_name.lower()), None)
@@ -329,7 +316,7 @@ async def buy_cmd(interaction, item_name: str):
     await interaction.response.send_message(f"✅ Mua {item['emoji']} **{item['name']}**!")
 
 @bot.tree.command(name="daily", description="Thưởng ngày")
-async def daily_cmd(interaction):
+async def daily_cmd(interaction: discord.Interaction):
     p = check_player(interaction.user.id)
     if not p: await interaction.response.send_message("❌ /create!", ephemeral=True); return
     g = random.randint(50,150); p['gold']+=g
@@ -337,7 +324,7 @@ async def daily_cmd(interaction):
 
 # ========== FUN ==========
 @bot.tree.command(name="meme", description="Meme")
-async def meme_cmd(interaction):
+async def meme_cmd(interaction: discord.Interaction):
     try:
         async with aiohttp.ClientSession() as s:
             async with s.get("https://meme-api.com/gimme", timeout=10) as r:
@@ -349,22 +336,22 @@ async def meme_cmd(interaction):
     await interaction.response.send_message("😂 Hết meme!")
 
 @bot.tree.command(name="dice", description="Xúc xắc")
-async def dice_cmd(interaction): await interaction.response.send_message(f"🎲 **{random.randint(1,6)}**")
+async def dice_cmd(interaction: discord.Interaction): await interaction.response.send_message(f"🎲 **{random.randint(1,6)}**")
 @bot.tree.command(name="coin", description="Đồng xu")
-async def coin_cmd(interaction): await interaction.response.send_message(f"🪙 **{'Ngửa' if random.random()<0.5 else 'Sấp'}**")
+async def coin_cmd(interaction: discord.Interaction): await interaction.response.send_message(f"🪙 **{'Ngửa' if random.random()<0.5 else 'Sấp'}**")
 @bot.tree.command(name="8ball", description="Bói")
-async def ball_cmd(interaction, question: str):
+async def ball_cmd(interaction: discord.Interaction, question: str):
     await interaction.response.send_message(f"🎱 **{question}**\n➡️ {random.choice(['Chắc chắn','Có vẻ vậy','Không rõ','Hỏi lại','Đừng mong','Không','Triển vọng','Nghi ngờ'])}")
 @bot.tree.command(name="hack", description="Hack fake")
-async def hack_cmd(interaction, user: discord.User): await interaction.response.send_message(f"💻 Hack {user.name}...\n💀 Done! (jk)")
+async def hack_cmd(interaction: discord.Interaction, user: discord.User): await interaction.response.send_message(f"💻 Hack {user.name}...\n💀 Done! (jk)")
 @bot.tree.command(name="ship", description="Ship")
-async def ship_cmd(interaction, u1: discord.User, u2: discord.User):
+async def ship_cmd(interaction: discord.Interaction, u1: discord.User, u2: discord.User):
     r=random.randint(0,100); await interaction.response.send_message(f"💕 {u1.name} x {u2.name}\n❤️ {'█'*(r//10)+'░'*(10-r//10)} **{r}%**")
 @bot.tree.command(name="iq", description="IQ")
-async def iq_cmd(interaction, user: discord.User=None):
+async def iq_cmd(interaction: discord.Interaction, user: discord.User = None):
     u=user or interaction.user; await interaction.response.send_message(f"🧠 {u.mention}: **{random.randint(1,200)}**")
 @bot.tree.command(name="gay", description="Độ gay")
-async def gay_cmd(interaction, user: discord.User=None):
+async def gay_cmd(interaction: discord.Interaction, user: discord.User = None):
     u=user or interaction.user; p=random.randint(1,100)
     await interaction.response.send_message(f"🏳️‍🌈 {u.mention} gay **{p}%**")
 
