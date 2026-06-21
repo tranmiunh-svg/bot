@@ -949,4 +949,123 @@ async def minesweeper_command(interaction: discord.Interaction, action: str="new
         if g["board"][row][col]==-1:
             g["status"]="lost"; p["gold"]-=g["bet"]
             d="\n".join(["".join(["💣 " if g["board"][r][c]==-1 else (str(g["board"][r][c])+"️⃣ " if g["revealed"][r][c] else "⬜ ") for c in range(s)]) for r in range(s)])
-            await interaction.response.send_message(embed=create_embed(title="💣 BOOM!",description=f"{d}\n💸 Th
+            await interaction.response.send_message(embed=create_embed(title="💣 BOOM!",description=f"{d}\n💸 Thua {g['bet']} gold!\n💰 **{p['gold']}**",color=discord.Color.red()))
+            del mini_game_players["minesweeper"][uid]
+        else:
+            rev=sum(sum(r) for r in g["revealed"]); safe=s*s-g["mines"]
+            d="\n".join(["".join(["🚩 " if g["flagged"][r][c] else (str(g["board"][r][c])+"️⃣ " if g["revealed"][r][c] else "⬜ ") for c in range(s)]) for r in range(s)])
+            if rev>=safe:
+                g["status"]="won"; wa=g["bet"]*3; p["gold"]+=wa
+                await interaction.response.send_message(embed=create_embed(title="💣 WIN!",description=f"{d}\n🎉 +{wa} gold!\n💰 **{p['gold']}**",color=discord.Color.green()))
+                del mini_game_players["minesweeper"][uid]
+            else:
+                await interaction.response.send_message(embed=create_embed(title="💣 MINESWEEPER",description=f"**{rev}/{safe} ô an toàn**\n\n{d}",color=discord.Color.blue()))
+    elif action=="flag":
+        g=mini_game_players["minesweeper"].get(uid)
+        if not g or g["status"]!="playing": await interaction.response.send_message("❌ `/minesweeper new`!"); return
+        s=g["size"]
+        if row<0 or row>=s or col<0 or col>=s: await interaction.response.send_message(f"❌ 0-{s-1}!"); return
+        if g["revealed"][row][col]: await interaction.response.send_message("❌ Đã mở!"); return
+        g["flagged"][row][col]=not g["flagged"][row][col]
+        d="\n".join(["".join(["🚩 " if g["flagged"][r][c] else (str(g["board"][r][c])+"️⃣ " if g["revealed"][r][c] else "⬜ ") for c in range(s)]) for r in range(s)])
+        await interaction.response.send_message(embed=create_embed(title="💣 CỜ",description=f"🚩 Đã {'đặt' if g['flagged'][row][col] else 'bỏ'} cờ ({row},{col})\n\n{d}",color=discord.Color.orange()))
+
+# ============================================================
+# MINI GAMES: BẮN CUNG
+# ============================================================
+@bot.tree.command(name="archery", description="🎯 Bắn cung")
+@app_commands.describe(power="Lực bắn (1-100)")
+async def archery_command(interaction: discord.Interaction, power: int=50):
+    p = check_player(interaction.user.id)
+    if not p: await interaction.response.send_message("❌ Cần `/create`!", ephemeral=True); return
+    if power<1 or power>100: await interaction.response.send_message("❌ 1-100!"); return
+    bonus=CLASSES[p["class"]]["crit"]/2; acc=random.uniform(-20,20)-bonus/2; dist=abs(50-power)+acc; dist=max(0,min(100,dist))
+    if dist<=5: score=100; ring="🎯 BULLSEYE!"; c=discord.Color.gold()
+    elif dist<=15: score=75; ring="🟡 Vàng!"; c=discord.Color.green()
+    elif dist<=25: score=50; ring="🔴 Đỏ!"; c=discord.Color.blue()
+    elif dist<=40: score=25; ring="🔵 Xanh!"; c=discord.Color.blue()
+    else: score=5; ring="⚪ Trật..."; c=discord.Color.dark_gray()
+    gr=score//2; p["gold"]+=gr
+    await interaction.response.send_message(embed=create_embed(title="🎯 BẮN CUNG",description=f"Lực: {power}/100\nKhoảng cách: {dist:.1f}\n{ring}\nĐiểm: {score} | +{gr}💰\n💰 Số dư: **{p['gold']}**",color=c))
+
+# ============================================================
+# FUN COMMANDS
+# ============================================================
+@bot.tree.command(name="meme", description="😂 Meme")
+async def meme(interaction: discord.Interaction):
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.get("https://meme-api.com/gimme", timeout=10) as r:
+                if r.status==200:
+                    d=await r.json()
+                    await interaction.response.send_message(embed=create_embed(title=d.get('title','Meme'), image=d.get('url',''), color=discord.Color.random()))
+                else: await interaction.response.send_message("❌ Lỗi!")
+    except: await interaction.response.send_message("😂 No meme!")
+
+@bot.tree.command(name="dice", description="🎲 Xúc xắc")
+async def dice(interaction: discord.Interaction): await interaction.response.send_message(f"🎲 **{random.randint(1,6)}**")
+
+@bot.tree.command(name="coin", description="🪙 Đồng xu")
+async def coin(interaction: discord.Interaction): await interaction.response.send_message(f"🪙 **{'Ngửa' if random.random()<0.5 else 'Sấp'}**")
+
+@bot.tree.command(name="8ball", description="🎱 Hỏi bói")
+@app_commands.describe(question="Câu hỏi")
+async def eightball(interaction: discord.Interaction, question: str):
+    ans=["Chắc chắn","Có vẻ vậy","Không rõ","Hỏi lại sau","Đừng mong","Tôi nói không","Triển vọng tốt","Rất đáng nghi"]
+    await interaction.response.send_message(f"🎱 **{question}**\n➡️ {random.choice(ans)}")
+
+@bot.tree.command(name="fact", description="📚 Sự thật")
+async def fact(interaction: discord.Interaction):
+    data=await async_request("https://uselessfacts.jsph.pl/api/v2/facts/random")
+    await interaction.response.send_message(f"📚 {data['text']}" if data else "📚 Trái đất tròn!")
+
+@bot.tree.command(name="hack", description="💻 Hack fake")
+async def hack(interaction: discord.Interaction, user: discord.User):
+    await interaction.response.send_message(f"💻 HACKING {user.name}..."); await asyncio.sleep(2)
+    await interaction.channel.send(f"🔓 Email: {user.name.lower()}{random.randint(1,99)}@gmail.com\n🔑 Pass: ***\n💀 Done! (jk)")
+
+@bot.tree.command(name="kill", description="💀 Giết fake")
+async def kill(interaction: discord.Interaction, user: discord.User):
+    ways=["rơi hố","zombie cắn","trúng tên","ngộ độc trà sữa","trượt vỏ chuối"]
+    await interaction.response.send_message(f"💀 {user.mention} chết vì {random.choice(ways)}! ⚰️")
+
+@bot.tree.command(name="hug", description="🤗 Ôm")
+async def hug(interaction: discord.Interaction, user: discord.User):
+    await interaction.response.send_message(f"🤗 {interaction.user.mention} ôm {user.mention}!")
+
+@bot.tree.command(name="slap", description="👋 Tát")
+async def slap(interaction: discord.Interaction, user: discord.User):
+    await interaction.response.send_message(f"👋 {interaction.user.mention} tát {user.mention} bay màu!")
+
+@bot.tree.command(name="ship", description="💕 Ship")
+async def ship(interaction: discord.Interaction, user1: discord.User, user2: discord.User):
+    r=random.randint(0,100); bar="█"*(r//10)+"░"*(10-r//10)
+    await interaction.response.send_message(f"💕 **{user1.name}** x **{user2.name}**\n❤️ [{bar}] **{r}%**")
+
+@bot.tree.command(name="iq", description="🧠 IQ")
+async def iq(interaction: discord.Interaction, user: discord.User=None):
+    u=user or interaction.user; await interaction.response.send_message(f"🧠 IQ của {u.mention}: **{random.randint(1,200)}**")
+
+@bot.tree.command(name="gay", description="🏳️‍🌈 Độ gay")
+async def gay(interaction: discord.Interaction, user: discord.User=None):
+    u=user or interaction.user; pct=random.randint(1,100); bar="█"*(pct//10)+"░"*(10-pct//10)
+    await interaction.response.send_message(f"🏳️‍🌈 {u.mention} gay **{pct}%**\n🌈 [{bar}]")
+
+# ============================================================
+# MAIN
+# ============================================================
+def main():
+    print(f"""
+\033[96m\033[1m╔══════════════════════════════════════════════════════╗
+║   DISCORD ALL-IN-ONE BOT v5.0 - FULL COMPLETE        ║
+║   Auto Setup + Game + Mini Games + NSFW              ║
+║   /help để xem menu                                  ║
+╚══════════════════════════════════════════════════════╝\033[0m
+""")
+    if not BOT_TOKEN: print("\033[91m❌ Chưa có token!\033[0m"); sys.exit(1)
+    try: bot.run(BOT_TOKEN)
+    except discord.LoginFailure: print("\033[91m❌ Token sai!\033[0m")
+    except Exception as e: print(f"\033[91m❌ {e}\033[0m")
+
+if __name__ == "__main__":
+    main()
